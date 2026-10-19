@@ -65,9 +65,11 @@ def html(res: Result, path: Path, mode: str) -> Path:
                 rows.append(f'<p class="line"><span class="t">{D.hms(s.start)}</span>'
                             f'{D.tidy(s.text)}</p>')
     else:
-        for a, b, t in D.group(res.segments):
+        for a, b, t, tr in res.paired():
+            body = D.tidy(t)
             rows.append(f'<p class="lab">{D.hms(a)} – {D.hms(b)}</p>'
-                        f'<p class="body">{D.tidy(t)}</p>')
+                        + (f'<p class="body"><b>{body}</b></p>' if tr else f'<p class="body">{body}</p>')
+                        + (f'<p class="tr">{tr}</p>' if tr else ""))
     meta = "  ·  ".join([f"语言 {D.lang_name(res.language)}", f"时长 {D.hms(res.duration)}",
                          f"{len(res.segments)} 句", D.short_engine(res.engine)])
     path.write_text(f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
@@ -82,6 +84,9 @@ h1 {{ font-size:17pt; margin:0 0 2px; }}
   margin-bottom:14px; }}
 .lab {{ font-size:8.5pt; color:#B8B2A6; margin:14px 0 1px; text-align:left; }}
 .body {{ margin:0 0 7px; }}
+.body b {{ font-weight:700; }}
+.tr {{ margin:-3px 0 12px; color:#4A4741; font-family:'Microsoft YaHei',sans-serif;
+  font-size:10.5pt; text-align:left; }}
 .line {{ margin:0 0 3px; font-size:10.5pt; text-align:left; }}
 .line .t {{ color:#B8B2A6; font-size:8.5pt; margin-right:8px; }}
 </style></head><body><div class="page"><h1>{D.pretty_title(res.source.name)}</h1>

@@ -92,6 +92,27 @@ def main():
     checks.append(("状态栏显示完成", "完成" in ui.status_lbl["text"]))
     checks.append(("进度条走满", ui.bar.coords(ui._bar_fg)[2] > 100))
 
+    # 2.5) 双语：stub 翻译器 + 勾上复选框，验证译文真的进入结果
+    import translate as TR
+
+    TR.translate_pairs = lambda pairs, src, tgt="zh", **k: [
+        f"〔译{i + 1}〕中文。" for i in range(len(pairs))]
+    ui.bi.set("on")
+
+    class Ev2:
+        data = "{" + str(SAMPLE) + "}"
+
+    ui.on_drop(Ev2())
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        root.update()
+        time.sleep(0.05)
+        if not ui.busy and ui.result and ui.result.translations:
+            break
+    checks.append(("双语译文进入结果", bool(ui.result and ui.result.translations)))
+    checks.append(("译文与段数对齐", bool(ui.result) and len(ui.result.translations)
+                   == len(ui.result.paired())))
+
     # 3) 复制与全格式导出
     ui.copy_all()
     root.update()
@@ -115,6 +136,10 @@ def main():
     checks.append(("中西文双字体", len(ea) > 3 and ea[0] == A.env.cjk_font()))
     xml0 = dd.paragraphs[1]._p.xml
     checks.append(("元信息带分隔线", "pBdr" in xml0 and "8A857B" in xml0))
+    all_text = " ".join(p.text for p in dd.paragraphs)
+    checks.append(("docx 里有双语译文", "〔译1〕" in all_text))
+    bolds = [r.bold for p in dd.paragraphs if p.runs for r in p.runs[:1]]
+    checks.append(("原文加粗译文不加粗", True in bolds and False in bolds))
     # 走 GUI 的写入口（导出菜单用的同一个函数）
     ui.write_to(OUT / "selftest2.docx", "docx", "lines")
     checks.append(("逐句版 docx", (OUT / "selftest2.docx").exists()))

@@ -130,6 +130,7 @@ class App:
         self.index = 0
         self.result: T.Result | None = None
         self.last_saved: Path | None = None
+        self._want_bi = False
         self.lang = "自动"
 
         root.title("拖拽转录")
@@ -190,6 +191,12 @@ class App:
                    indicatoron=False)
         box["menu"].config(font=(FONT, 9), bg=BG, fg=FG)
         box.pack(side="left", padx=(6, 14))
+        self.bi = tk.StringVar(value="")
+        cb = tk.Checkbutton(bot, text="双语（附中文）", variable=self.bi, onvalue="on",
+                            offvalue="", bg=CARD, fg=FG, activebackground=CARD,
+                            activeforeground=FG, selectcolor=BG, relief="flat",
+                            highlightthickness=0, font=(FONT, 9), cursor="hand2")
+        cb.pack(side="left", padx=(0, 12))
         self._btn(bot, "复制全部", self.copy_all).pack(side="left", padx=(0, 6))
         exp = tk.Menubutton(bot, text="导出 ▾", bg=CARD, fg=FG, relief="flat", bd=0,
                             cursor="hand2", font=(FONT, 9), padx=11, pady=4,
@@ -278,6 +285,8 @@ class App:
         self.clear_text()
         size = self.root.winfo_width()
         self.bar.coords(self._bar_bg, 0, 0, max(size, 1), 2)
+        # tk 变量只能在主线程读，先取成普通字段给后台线程用
+        self._want_bi = self.bi.get() == "on"
 
         def worker():
             try:
@@ -288,11 +297,26 @@ class App:
                     should_stop=self.stop_flag.is_set,
                     on_note=lambda m: self.q.put(("note", m)),
                 )
+                if self._want_bi and r.segments and not self.stop_flag.is_set():
+                    r.translations = self._translate(r)
                 self.q.put(("done", r))
             except Exception as e:
                 self.q.put(("error", f"{e}\n{traceback.format_exc(limit=1)}"))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _translate(self, r):
+        """转录完接着做离线翻译；失败就退回纯原文，不毁掉整次结果。"""
+        import translate
+
+        try:
+            return translate.translate_pairs(
+                r.paired(), (r.language or "es")[:2], "zh",
+                on_progress=lambda done, total: self.q.put(("progress", done, total)),
+                should_stop=self.stop_flag.is_set)
+        except Exception as e:
+            self.q.put(("note", f"翻译未完成：{type(e).__name__}: {str(e)[:120]}"))
+            return []
 
     # ---------- 轮询后台事件 ----------
     def poll(self):

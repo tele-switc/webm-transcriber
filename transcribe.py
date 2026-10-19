@@ -73,10 +73,18 @@ class Result:
             lines.append("  ")
             lines.append("> 源录像的 WebM 头部丢失，已自动重建 EBML/Info/Tracks 后再转写。")
         lines.append("")
-        for s in self.segments:
-            if s.text:
-                lines.append(f"**[{fmt_ts(s.start)}] {s.text}**")
+        if self.translations:
+            for a, b, text, tr in self.paired():
+                lines.append(f"**[{fmt_ts(a)}–{fmt_ts(b)}] {text.strip()}**")
                 lines.append("")
+                if tr:
+                    lines.append(tr.strip())
+                    lines.append("")
+        else:
+            for s in self.segments:
+                if s.text:
+                    lines.append(f"**[{fmt_ts(s.start)}] {s.text}**")
+                    lines.append("")
         return "\n".join(lines)
 
     def srt(self) -> str:
@@ -234,14 +242,8 @@ _model_info = ""
 
 
 def _prep_dll_path() -> None:
-    """ctranslate2 的 CUDA 运行库必须在 import 前挂好，否则加载失败。"""
-    for d in env.cuda_dirs():
-        os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
-        if hasattr(os, "add_dll_directory"):
-            try:
-                os.add_dll_directory(str(d))
-            except OSError:
-                pass
+    """ctranslate2 的 CUDA 运行库必须在加载模型前挂好。"""
+    env.prep_cuda_paths()
 
 
 def load_model(device: str = "auto", on_note=None):
@@ -389,6 +391,13 @@ def main(argv: list[str]) -> int:
 
     r = transcribe(path, lang, on_progress=prog,
                    on_segment=lambda s: print(f"[{fmt_ts(s.start)}] {s.text}", flush=True))
+    if "--bilingual" in argv[1:] and r.segments:
+        import translate
+
+        pairs = r.paired()
+        print(f"离线翻译 {len(pairs)} 段…", flush=True)
+        r.translations = translate.translate_pairs(pairs, (r.language or "es")[:2], "zh",
+                                                   on_progress=prog)
     files = write_outputs(r, Path(out), fmts)
     print(f"\n语言 {r.language} · 句数 {len(r.segments)} · {r.engine}")
     for f in files:

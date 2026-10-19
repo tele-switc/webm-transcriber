@@ -150,6 +150,17 @@ def open_path(target: Path) -> None:
         subprocess.run(["xdg-open", str(folder)], check=False)
 
 
+def prep_cuda_paths() -> None:
+    """把 CUDA/cuDNN 运行库挂进进程：ctranslate2 加载 GPU 前必须做，且要在 import 之后也行。"""
+    for d in cuda_dirs():
+        os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(str(d))
+            except OSError:
+                pass
+
+
 def find_ffmpeg_or_av() -> bool:
     """能不能解码：有 ffmpeg 二进制，或有随 wheel 自带解码库的 PyAV。"""
     return bool(ffmpeg_bin()) or has_pyav()

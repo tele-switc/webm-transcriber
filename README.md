@@ -47,9 +47,32 @@ python transcribe.py 录音.webm   # 命令行，结果写 ./output
 | `W2T_FFMPEG` / `W2T_FFPROBE` | 指定 ffmpeg 路径 |
 | `W2T_CUDA_DIR` | 放 `cudnn/cublas` 等 dll 的目录，指定后 Windows 走 GPU |
 
+## 坏录像自动修复
+
+浏览器 MediaRecorder（网课、会议、屏幕录制）被强杀或断电后，文件开头的 EBML/Info/Tracks 会丢，
+播放器打不开但数据其实完好。拖这种文件进来会先自动重建头部再转写：
+修好的录像留在源文件旁的「修复后」目录，Word 里会注明这份转写来自重建过头部的录像。
+
+## 双语对照
+
+勾上「双语（附中文）」后，转写完成会接着把每一段翻成中文，Word 里原文加粗、译文紧随其下
+（与他那份人工校对稿的读法一致）。翻译用本机推理的 NLLB-200 模型，不联网、不上传内容。
+
+模型不随安装包分发（HF 上原始权重是 gated 的），首次勾选翻译时会自动从本项目 Release 下载
+int8 版约 600MB。若下载不到，维护者需先构建一次：
+
+```bash
+# 1) 在 https://huggingface.co/facebook/nllb-200-distilled-600M 点 Agree and Access
+# 2) 设好 HF_TOKEN 与 GH_PAT
+python scripts/build_mt_model.py
+```
+
+没翻译模型时软件照常出纯原文转写，不会报错中断。
+
 ## 导出格式
 
 Word（自动排版：按停顿聚段、时间标签、页码、中西文双字体）、Word（逐句对照）、txt、md、srt、vtt、json。
+勾了双语的话，Word 与 md 会自动变成西中对照版。
 
 ## 已知限制
 
