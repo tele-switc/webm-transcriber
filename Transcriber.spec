@@ -85,6 +85,8 @@ exe = EXE(
     upx=False,
     console=False,
     icon=ICON,
+    # 不声明 PerMonitorV2 的话，PyInstaller 生成的 exe 在高分屏上会被系统位图拉伸发虚
+    manifest="installer/app.manifest" if sys.platform == "win32" else None,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Transcriber")
 
