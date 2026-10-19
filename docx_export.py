@@ -141,14 +141,12 @@ def short_engine(engine: str) -> str:
     return e or "whisper"
 
 
-LANGS = {"es": "西班牙语", "zh": "中文", "en": "英语", "ja": "日语", "ko": "韩语",
-         "fr": "法语", "de": "德语", "pt": "葡萄牙语", "ru": "俄语", "it": "意大利语",
-         "ar": "阿拉伯语"}
-
-
 def lang_name(code: str) -> str:
+    """语言中文名（表在 languages.py，与界面共用）。"""
+    import languages as LG
+
     c = (code or "").lower()
-    return f"{LANGS.get(c, c or '未知')} ({c.upper()})" if c else "未知"
+    return f"{LG.label(c)} ({c.upper()})" if c else "未知"
 
 
 def build(result, mode: str = "blocks") -> Document:
@@ -178,8 +176,11 @@ def build(result, mode: str = "blocks") -> Document:
     meta = doc.add_paragraph()
     meta.paragraph_format.space_after = Pt(14)
     _bottom_rule(meta)
+    lang_part = (f"语向 {lang_name(result.language)} → {lang_name(result.tgt_lang)}"
+                 if getattr(result, "tgt_lang", "")
+                 else f"语言 {lang_name(result.language)}")
     r = meta.add_run("  ·  ".join([
-        f"语言 {lang_name(result.language)}",
+        lang_part,
         f"时长 {hms(result.duration)}",
         f"{len(result.segments)} 句",
         short_engine(result.engine),

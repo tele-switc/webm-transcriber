@@ -12,11 +12,7 @@ import urllib.request
 from pathlib import Path
 
 import env
-
-# NLLB-200 用的是 triletter 语言码
-NLLB = {"es": "spa_Latn", "en": "eng_Latn", "fr": "fra_Latn", "de": "deu_Latn",
-        "pt": "por_Latn", "it": "ita_Latn", "ru": "rus_Cyrl", "ja": "jpn_Jpan",
-        "ko": "kor_Hang", "ar": "arb_Arab", "zh": "cmn_Hans"}
+import languages as LG
 
 MODEL_NAME = "nllb-600m-ct2"
 # 打包好的 int8 模型；HF 上原始权重是 gated 的，所以走自己的 Release 分发
@@ -67,10 +63,9 @@ def download(on_note=None) -> Path:
 class Translator:
     """一段进一段出的 NLLB 翻译器；模型只加载一次。"""
 
-    def __init__(self, src: str, tgt: str = "zh"):
-        if src not in NLLB or tgt not in NLLB:
-            raise RuntimeError(f"暂不支持 {src}→{tgt}；可选 {', '.join(sorted(NLLB))}")
-        self.src, self.tgt = NLLB[src], NLLB[tgt]
+    def __init__(self, src: str = "es", tgt: str = "zh"):
+        # 语向不支持时 LG.nllb 会直接报错，界面据此退回纯原文
+        self.src, self.tgt = LG.nllb(src), LG.nllb(tgt)
         self._model = None
         self._sp = None
 

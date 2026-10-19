@@ -40,6 +40,7 @@ from tkinter import filedialog, messagebox  # noqa: E402
 from tkinterdnd2 import DND_FILES, TkinterDnD  # noqa: E402
 
 import env  # noqa: E402
+import languages as LG  # noqa: E402
 import transcribe as T  # noqa: E402
 
 # ---------- 配色：淡色块 + 细色条，不做饱和填充 ----------
@@ -131,7 +132,9 @@ class App:
         self.result: T.Result | None = None
         self.last_saved: Path | None = None
         self._want_bi = False
-        self.lang = "自动"
+        self._want_tgt = "zh"
+        self.lang = ""          # 空串＝自动检测
+        self.tgt = "zh"         # 译文语言
 
         root.title("拖拽转录")
         root.configure(bg=BG)
@@ -182,21 +185,20 @@ class App:
         # 底部：语言、保存、复制
         bot = self.bot = self._card(self.root, padx=14, pady=10)
         bot.pack(fill="x", padx=14, pady=(6, 14))
-        self._lbl(bot, "语言", 9, MUTED).pack(side="left")
-        self.lang_var = tk.StringVar(value="自动")
-        langs = ["自动", "zh", "en", "es", "ja", "ko", "fr", "de", "ru", "ar"]
-        box = tk.OptionMenu(bot, self.lang_var, *langs, command=self._set_lang)
-        box.config(bg=CARD, fg=FG, activebackground=CARD, relief="flat", width=6,
-                   font=(FONT, 9), highlightthickness=1, highlightbackground=LINE,
-                   indicatoron=False)
-        box["menu"].config(font=(FONT, 9), bg=BG, fg=FG)
-        box.pack(side="left", padx=(6, 14))
+        self._lbl(bot, "转写", 9, MUTED).pack(side="left")
+        self.lang_var = tk.StringVar(value="自动检测")
+        self._menu(bot, self.lang_var, ["自动检测"] + LG.choices(), self._set_lang, 10)\
+            .pack(side="left", padx=(5, 12))
         self.bi = tk.StringVar(value="")
-        cb = tk.Checkbutton(bot, text="双语（附中文）", variable=self.bi, onvalue="on",
-                            offvalue="", bg=CARD, fg=FG, activebackground=CARD,
-                            activeforeground=FG, selectcolor=BG, relief="flat",
-                            highlightthickness=0, font=(FONT, 9), cursor="hand2")
-        cb.pack(side="left", padx=(0, 12))
+        cb = tk.Checkbutton(bot, text="双语", variable=self.bi, onvalue="on", offvalue="",
+                            bg=CARD, fg=FG, activebackground=CARD, activeforeground=FG,
+                            selectcolor=BG, relief="flat", highlightthickness=0,
+                            font=(FONT, 9), cursor="hand2")
+        cb.pack(side="left", padx=(2, 14))
+        self._lbl(bot, "译为", 9, MUTED).pack(side="left")
+        self.tgt_var = tk.StringVar(value="简体中文")
+        self._menu(bot, self.tgt_var, LG.choices(), self._set_tgt, 10)\
+            .pack(side="left", padx=(5, 12))
         self._btn(bot, "复制全部", self.copy_all).pack(side="left", padx=(0, 6))
         exp = tk.Menubutton(bot, text="导出 ▾", bg=CARD, fg=FG, relief="flat", bd=0,
                             cursor="hand2", font=(FONT, 9), padx=11, pady=4,
@@ -240,8 +242,20 @@ class App:
                       highlightbackground=LINE)
         return b
 
+    def _menu(self, parent, var, values, cmd, width):
+        """统一样式的下拉框。"""
+        box = tk.OptionMenu(parent, var, *values, command=cmd)
+        box.config(bg=CARD, fg=FG, activebackground=CARD, relief="flat", width=width,
+                   font=(FONT, 9), highlightthickness=1, highlightbackground=LINE,
+                   indicatoron=False)
+        box["menu"].config(font=(FONT, 9), bg=BG, fg=FG)
+        return box
+
     def _set_lang(self, v):
-        self.lang = v
+        self.lang = LG.code_of(v)          # 「自动检测」映射成空串
+
+    def _set_tgt(self, v):
+        self.tgt = LG.code_of(v) or "zh"
 
     # ---------- 拖放 ----------
     def on_drop(self, event):
@@ -274,7 +288,7 @@ class App:
 
     def _enqueue(self):
         p = self.files[self.index]
-        lang = None if self.lang == "自动" else self.lang
+        lang = self.lang or None
         self.busy = True
         self.stop_flag.clear()
         self.result = None
@@ -287,6 +301,7 @@ class App:
         self.bar.coords(self._bar_bg, 0, 0, max(size, 1), 2)
         # tk 变量只能在主线程读，先取成普通字段给后台线程用
         self._want_bi = self.bi.get() == "on"
+        self._want_tgt = self.tgt
 
         def worker():
             try:
@@ -299,6 +314,8 @@ class App:
                 )
                 if self._want_bi and r.segments and not self.stop_flag.is_set():
                     r.translations = self._translate(r)
+                    if r.translations:
+                        r.tgt_lang = self._want_tgt
                 self.q.put(("done", r))
             except Exception as e:
                 self.q.put(("error", f"{e}\n{traceback.format_exc(limit=1)}"))
@@ -311,7 +328,7 @@ class App:
 
         try:
             return translate.translate_pairs(
-                r.paired(), (r.language or "es")[:2], "zh",
+                r.paired(), (r.language or "es")[:2], self._want_tgt,
                 on_progress=lambda done, total: self.q.put(("progress", done, total)),
                 should_stop=self.stop_flag.is_set)
         except Exception as e:

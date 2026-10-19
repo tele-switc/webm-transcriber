@@ -92,12 +92,26 @@ def main():
     checks.append(("状态栏显示完成", "完成" in ui.status_lbl["text"]))
     checks.append(("进度条走满", ui.bar.coords(ui._bar_fg)[2] > 100))
 
-    # 2.5) 双语：stub 翻译器 + 勾上复选框，验证译文真的进入结果
+    # 0.5) 语言表完整性
+    import languages as LG
+
+    checks.append(("语言表 24 种", len(LG.LANGS) >= 20))
+    checks.append(("代码不重复", len({c for c, _, _ in LG.LANGS}) == len(LG.LANGS)))
+    checks.append(("NLLB 码齐全", all(len(n) >= 6 for _, _, n in LG.LANGS)))
+    checks.append(("中文名反查可用", LG.code_of("西班牙语") == "es" and LG.label("fr") == "法语"))
+
+    # 2.5) 双语：stub 翻译器 + 勾上复选框 + 自选译文语言
     import translate as TR
 
-    TR.translate_pairs = lambda pairs, src, tgt="zh", **k: [
-        f"〔译{i + 1}〕中文。" for i in range(len(pairs))]
+    seen = {}
+
+    def fake_pairs(pairs, src, tgt="zh", **k):
+        seen["src"], seen["tgt"] = src, tgt
+        return [f"〔译{i + 1}〕中文。" for i in range(len(pairs))]
+
+    TR.translate_pairs = fake_pairs
     ui.bi.set("on")
+    ui.tgt = "fr"          # 用户自选译文语言
 
     class Ev2:
         data = "{" + str(SAMPLE) + "}"
@@ -110,6 +124,8 @@ def main():
         if not ui.busy and ui.result and ui.result.translations:
             break
     checks.append(("双语译文进入结果", bool(ui.result and ui.result.translations)))
+    checks.append(("译文语言按自选传递", seen.get("tgt") == "fr"))
+    checks.append(("结果记录译文语言", getattr(ui.result, "tgt_lang", "") == "fr"))
     checks.append(("译文与段数对齐", bool(ui.result) and len(ui.result.translations)
                    == len(ui.result.paired())))
 
@@ -138,6 +154,7 @@ def main():
     checks.append(("元信息带分隔线", "pBdr" in xml0 and "8A857B" in xml0))
     all_text = " ".join(p.text for p in dd.paragraphs)
     checks.append(("docx 里有双语译文", "〔译1〕" in all_text))
+    checks.append(("docx 标了语向", "→ 法语 (FR)" in all_text))
     bolds = [r.bold for p in dd.paragraphs if p.runs for r in p.runs[:1]]
     checks.append(("原文加粗译文不加粗", True in bolds and False in bolds))
     # 走 GUI 的写入口（导出菜单用的同一个函数）

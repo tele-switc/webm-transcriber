@@ -47,6 +47,7 @@ class Result:
     engine: str = ""
     repaired: bool = False
     translations: list[str] = field(default_factory=list)   # 与 segments 同序，可空
+    tgt_lang: str = ""                                        # 译文语言代码
 
     def paired(self):
         """按停顿聚段后的 (起, 止, 原文, 译文) 列表；没翻译时译文为空串。"""
@@ -379,7 +380,8 @@ def main(argv: list[str]) -> int:
     fmts = tuple(next((a.split("=", 1)[1] for a in argv[1:] if a.startswith("--fmt=")),
                       "txt,md,srt,docx").split(","))
     if not args:
-        print("用法: python transcribe.py <媒体文件> [--lang=zh] [--out=目录]")
+        print("用法: python transcribe.py <媒体文件> [--lang=es] [--out=目录] "
+              "[--fmt=txt,md,srt,docx] [--bilingual --tgt=zh]")
         return 2
     path = Path(args[0])
     last = [0.0]
@@ -394,10 +396,12 @@ def main(argv: list[str]) -> int:
     if "--bilingual" in argv[1:] and r.segments:
         import translate
 
+        tgt = next((a.split("=", 1)[1] for a in argv[1:] if a.startswith("--tgt=")), "zh")
         pairs = r.paired()
-        print(f"离线翻译 {len(pairs)} 段…", flush=True)
-        r.translations = translate.translate_pairs(pairs, (r.language or "es")[:2], "zh",
+        print(f"离线翻译 {len(pairs)} 段 → {tgt}…", flush=True)
+        r.translations = translate.translate_pairs(pairs, (r.language or "es")[:2], tgt,
                                                    on_progress=prog)
+        r.tgt_lang = tgt if r.translations else ""
     files = write_outputs(r, Path(out), fmts)
     print(f"\n语言 {r.language} · 句数 {len(r.segments)} · {r.engine}")
     for f in files:
