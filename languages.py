@@ -9,7 +9,7 @@ from __future__ import annotations
 # (ISO-639-1, 中文名, NLLB 码)
 LANGS = [
     ("es", "西班牙语", "spa_Latn"),
-    ("zh", "简体中文", "cmn_Hans"),
+    ("zh", "简体中文", "zho_Hans"),
     ("en", "英语", "eng_Latn"),
     ("ja", "日语", "jpn_Jpan"),
     ("ko", "韩语", "kor_Hang"),

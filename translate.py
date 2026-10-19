@@ -92,17 +92,36 @@ class Hop:
         else:
             dec = enc
         env.prep_cuda_paths()
+        # 语言码不在词表里时，模型不会报错，只会吐一堆乱码 —— 必须提前校验
+        if self.kind == "nllb":
+            vocab = d / "shared_vocabulary.json"
+            if vocab.exists():
+                import json
+
+                known = set(json.loads(vocab.read_text(encoding="utf-8")))
+                for code in (LG.nllb(self.src), LG.nllb(self.tgt)):
+                    if code not in known:
+                        raise RuntimeError(
+                            f"模型词表里没有语言码 {code}（{LG.label(self.src if code == LG.nllb(self.src) else self.tgt)}）")
         self._pair = (enc, dec, ctranslate2.Translator(str(d), compute_type="int8"))
         return self._pair
 
     def run(self, texts: list[str]) -> list[str]:
         enc, dec, model = self._load()
-        prefix = [LG.nllb(self.src), LG.nllb(self.tgt)] if self.kind == "nllb" else []
-        tok = [prefix + enc.encode(t, out_type=str) for t in texts]
-        # 课堂口语没有标点、句子又长，Marian 极易陷入重复循环，必须开重复惩罚
-        hyp = model.translate_batch(tok, beam_size=2, num_hypotheses=1,
-                                    repetition_penalty=1.6, no_repeat_ngram_size=3,
-                                    max_decoding_length=320)
+        if self.kind == "nllb":
+            # NLLB 的 CT2 用法：源语言码前置在 source 里，目标语言码走 target_prefix。
+            # 两个码都塞进 source 会让解码器乱吐语言标记。
+            src = [[LG.nllb(self.src)] + enc.encode(t, out_type=str) for t in texts]
+            pre = [[LG.nllb(self.tgt)]] * len(texts)
+            hyp = model.translate_batch(src, target_prefix=pre, beam_size=4,
+                                        num_hypotheses=1, repetition_penalty=1.3,
+                                        max_decoding_length=400)
+        else:
+            src = [enc.encode(t, out_type=str) for t in texts]
+            # 课堂口语没有标点、句子又长，Marian 极易陷入重复循环，必须开重复惩罚
+            hyp = model.translate_batch(src, beam_size=2, num_hypotheses=1,
+                                        repetition_penalty=1.6, no_repeat_ngram_size=3,
+                                        max_decoding_length=320)
         return [dec.decode(h.hypotheses[0]).strip() for h in hyp]
 
 
