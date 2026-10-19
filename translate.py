@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 import urllib.request
 from pathlib import Path
 
@@ -58,6 +59,53 @@ def download(on_note=None) -> Path:
     if not has_model():
         raise RuntimeError(f"翻译模型解压后不完整：{dest / MODEL_NAME}")
     return model_dir()
+
+
+GOOGLE = "https://translate.googleapis.com/translate_a/single"
+
+
+class Web:
+    """免费公开翻译端点：不用装模型、不用注册、不用 key，弱机也无所谓。
+
+    可以用 W2T_MT_URL 指向自建中转（例如 Cloudflare Worker），
+    以避开部分地区对 googleapis 的访问限制。
+    """
+
+    def __init__(self, src: str, tgt: str):
+        self.src, self.tgt = src[:2], tgt[:2]
+        self.base = os.environ.get("W2T_MT_URL", GOOGLE)
+
+    @staticmethod
+    def ready() -> bool:
+        return True
+
+    def run(self, texts: list[str], on_progress=None, should_stop=None) -> list[str]:
+        import json
+        import urllib.parse
+        import urllib.request
+
+        out: list[str] = []
+        for i, t in enumerate(texts):
+            if should_stop and should_stop():
+                break
+            q = urllib.parse.urlencode({"client": "gtx", "sl": self.src, "tl": self.tgt,
+                                        "dt": "t", "q": t[:4500]})
+            req = urllib.request.Request(f"{self.base}?{q}",
+                                         headers={"User-Agent": "Mozilla/5.0"})
+            for attempt in range(3):
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as r:
+                        data = json.loads(r.read().decode("utf-8"))
+                    out.append("".join(seg[0] or "" for seg in data[0] if seg and seg[0]))
+                    break
+                except Exception:
+                    if attempt == 2:
+                        out.append("")          # 单句失败不毁掉整份文稿
+                    time.sleep(1.5 * (attempt + 1))
+            if on_progress:
+                on_progress(i + 1, len(texts))
+            time.sleep(0.15)                    # 别把免费端点打死
+        return out
 
 
 class Hop:
@@ -149,15 +197,18 @@ def plan(src: str, tgt: str) -> list[Hop]:
 
 
 class Translator:
-    """一段进一段出的翻译器；模型只加载一次。"""
+    """一段进一段出的翻译器。默认走免费网络端点，W2T_MT_MODE=local 才用本机模型。"""
 
     def __init__(self, src: str = "es", tgt: str = "zh"):
         self.src_code, self.tgt_code = src[:2], tgt[:2]
         LG.nllb(self.src_code), LG.nllb(self.tgt_code)   # 早失败：语向不在表里就别浪费时间
-        self.hops = plan(self.src_code, self.tgt_code)
+        self.mode = os.environ.get("W2T_MT_MODE", "web")
+        self.hops = [] if self.mode == "web" else plan(self.src_code, self.tgt_code)
 
     def translate(self, texts, on_progress=None, should_stop=None) -> list[str]:
         """逐跳翻译整批文本；on_progress(已完成段数, 总段数)。"""
+        if self.mode == "web":
+            return Web(self.src_code, self.tgt_code).run(texts, on_progress, should_stop)
         cur = list(texts)
         total = len(cur)
         for hop in self.hops:
@@ -177,8 +228,11 @@ class Translator:
 def translate_pairs(pairs, src: str, tgt: str = "zh", on_progress=None,
                     on_note=None, should_stop=None) -> list[str]:
     """给 Result.paired() 的 (起, 止, 原文, 旧译文) 补译文；只翻原文列。"""
-    if on_note and not (has_model() or marian_ready(src[:2], tgt[:2])):
-        on_note("准备离线翻译模型…")
+    if on_note:
+        if os.environ.get("W2T_MT_MODE", "web") == "web":
+            on_note("翻译中（走免费网络端点，需要联网）…")
+        elif not (has_model() or marian_ready(src[:2], tgt[:2])):
+            on_note("准备离线翻译模型…")
     tr = Translator(src, tgt)
     return tr.translate([p[2] for p in pairs], on_progress=on_progress,
                         should_stop=should_stop)

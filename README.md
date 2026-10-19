@@ -56,19 +56,28 @@ python transcribe.py 录音.webm   # 命令行，结果写 ./output
 ## 多语言与双语对照
 
 转写支持 24 种语言（默认自动检测），双语的语向可以自选：底部「转写」选源语言、「译为」选译文语言，
-勾上「双语」后 Word 与 md 会变成对照版 —— 原文加粗、译文紧随其下，元信息行标出「语向 西班牙语 → 法语」。
-翻译用本机推理的 NLLB-200 模型，不联网、不上传内容；语向不支持时自动退回纯原文，不中断转写。
+勾上「双语」后 Word 与 md 会变成对照版 —— 原文加粗、译文紧随其下，元信息行标出「语向 西班牙语 → 中文」。
+
+**翻译默认走免费公开端点**：不需要注册、不需要 API key、不需要本机跑模型，所以老电脑也能用；
+只有语音转写是本地跑的。一小时录音的翻译约 4 分钟。想彻底离线、或所在地区访问不了该端点时：
+
+| 做法 | 怎么设 |
+| --- | --- |
+| 自建中转（可用 Cloudflare Worker 包一层） | `W2T_MT_URL=https://你的中转/translate_a/single` |
+| 改走本机模型（需先构建，见下） | `W2T_MT_MODE=local` |
 
 命令行同理：`python transcribe.py 录音.webm --lang=es --bilingual --tgt=fr`。
 
-模型不随安装包分发（HF 上原始权重是 gated 的），首次勾选翻译时会自动从本项目 Release 下载
-int8 版约 600MB。若下载不到，维护者需先构建一次：
+离线模型不随安装包分发（HF 上原始权重是 gated 的），要用先构建一次：
 
 ```bash
 # 1) 在 https://huggingface.co/facebook/nllb-200-distilled-600M 点 Agree and Access
-# 2) 设好 HF_TOKEN 与 GH_PAT
-python scripts/build_mt_model.py
+# 2) 设好 HF_TOKEN
+python scripts/fetch_mt_model.py
 ```
+
+NLLB-600M 对课堂口语的质量明显不如网络端点，弱机上也更慢，只在必须完全离线时才用。
+没有翻译模型或网络不通时，软件照常输出纯原文转写，不会报错中断。
 
 没翻译模型时软件照常出纯原文转写，不会报错中断。
 

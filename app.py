@@ -191,6 +191,7 @@ class App:
             .pack(side="left", padx=(5, 12))
         self.bi = tk.StringVar(value="")
         cb = tk.Checkbutton(bot, text="双语", variable=self.bi, onvalue="on", offvalue="",
+                            command=self._on_bi,
                             bg=CARD, fg=FG, activebackground=CARD, activeforeground=FG,
                             selectcolor=BG, relief="flat", highlightthickness=0,
                             font=(FONT, 9), cursor="hand2")
@@ -256,6 +257,12 @@ class App:
 
     def _set_tgt(self, v):
         self.tgt = LG.code_of(v) or "zh"
+
+    def _on_bi(self):
+        """勾上双语时说清联网与耗时，别让人以为卡住了。"""
+        if self.bi.get() == "on":
+            self.set_status("双语已开：转写完会联网翻译（免费、无需注册），"
+                            "一小时录音约需 4 分钟")
 
     # ---------- 拖放 ----------
     def on_drop(self, event):
