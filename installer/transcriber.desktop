@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Transcriber
+Name[zh_CN]=拖拽转录
+Comment=Drop a video, get a transcript
+Exec=Transcriber %F
+Icon=transcriber
+Terminal=false
+Categories=AudioVideo;Utility;
+MimeType=audio/*;video/*;

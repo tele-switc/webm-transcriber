@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec.bak
+output/
+logs/
+*.wav
+*.tmp
+.venv/
+icon.iconset/
+installer/icon_src.png
