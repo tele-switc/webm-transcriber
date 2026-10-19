@@ -1,19 +1,30 @@
-"""拉取离线翻译模型：CT2 int8 权重 + NLLB 的 sentencepiece 分词器。
+"""把 gated 的 NLLB-200 转成 int8 CTranslate2 模型并装进本机模型目录。
 
-两个文件都来自非 gated 的公开仓库，所以不需要任何 HuggingFace token。
-跑法：python scripts/fetch_mt_model.py
+需要一次性准备（都在浏览器里做）：
+  1. 登录 huggingface.co，打开 https://huggingface.co/facebook/nllb-200-distilled-600M
+     点 *Agree and Access*（不点会一直 401）
+  2. 在 https://huggingface.co/settings/tokens/new?scopes=read 建一个 Read token
+
+然后：
+    HF_TOKEN=hf_xxx python scripts/fetch_mt_model.py
+
+之后 translate.py 会自动走 NLLB 直翻（比 Marian 两跳好一档），
+并把模型目录打包成 zip 传 Release 用：python scripts/fetch_mt_model.py --zip-upload
 """
 
 from __future__ import annotations
 
+import argparse
+import os
+import shutil
+import subprocess
 import sys
 import time
-import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-# 重定向到文件时 Windows 控制台是 GBK，中文与勾号都会炸
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8", errors="replace")
@@ -22,64 +33,70 @@ for _s in (sys.stdout, sys.stderr):
 
 import translate as MT  # noqa: E402
 
-# CT2 格式的 int8 权重（4 个文件）+ 另一家镜像里的 spm 分词器
-CT2_REPO = "https://huggingface.co/next-social/nllb-200-distilled-600M-int8/resolve/main/"
-CT2_FILES = ["config.json", "model.bin", "shared_vocabulary.txt"]
-SPM_URL = "https://huggingface.co/Xenova/nllb-200-distilled-600M/resolve/main/sentencepiece.bpe.model"
-PROXY = "http://127.0.0.1:7890"
+REPO = "facebook/nllb-200-distilled-600M"
+PROXY = os.environ.get("W2T_PROXY", "http://127.0.0.1:7890")
+COPY = ["sentencepiece.bpe.model", "tokenizer.json", "tokenizer_config.json",
+        "special_tokens_map.json", "config.json", "generation_config.json"]
 
 
-def fetch(url: str, dst: Path, tries: int = 5) -> None:
-    """带重试与进度的下载（这台机器到 HF 会间歇性断）。"""
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": PROXY, "https": PROXY}))
-    for i in range(tries):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "w2t-mt"})
-            with opener.open(req, timeout=1800) as r:
-                total = int(r.headers.get("Content-Length") or 0)
-                got = 0
-                tmp = dst.with_suffix(dst.suffix + ".part")
-                with open(tmp, "wb") as f:
-                    while True:
-                        buf = r.read(1 << 20)
-                        if not buf:
-                            break
-                        f.write(buf)
-                        got += len(buf)
-                        if total and got % (20 << 20) < (1 << 20):
-                            print(f"    {got / 1e6:6.0f}/{total / 1e6:.0f}MB "
-                                  f"({got / total * 100:.0f}%)", flush=True)
-                # 连接被掐断时 read() 只会返回空，不当成错误校验就会留下半截文件
-                if total and got < total:
-                    raise IOError(f"只收到 {got}/{total} 字节")
-                if dst.exists():
-                    dst.unlink()
-                tmp.replace(dst)
-            ok = f"  [ok] {dst.name} {dst.stat().st_size / 1e6:.1f}MB"
-        except Exception as e:
-            print(f"  重试 {i + 1}: {type(e).__name__} {str(e)[:80]}", flush=True)
-            time.sleep(3 + 3 * i)
-            continue
-        print(ok, flush=True)
-        return
-    raise RuntimeError(f"下载失败：{url}")
+def convert(work: Path) -> Path:
+    """下载（带 token）+ 转 int8 CT2，输出到本机模型目录。"""
+    token = os.environ.get("HF_TOKEN", "")
+    if not token:
+        raise RuntimeError("没给 HF_TOKEN：先按脚本顶部说明去 HF 同意条款并建 Read token")
+    os.environ["HF_TOKEN"] = token
+    os.environ["HUGGING_FACE_HUB_TOKEN"] = token
+    os.environ.setdefault("HTTPS_PROXY", PROXY)
+    os.environ.setdefault("HTTP_PROXY", PROXY)
+
+    raw = work / "nllb-raw"
+    dst = MT.env.data_dir() / "models" / MT.MODEL_NAME
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(dst, ignore_errors=True)
+    conv = shutil.which("ct2-transformers-converter")
+    if not conv:
+        raise RuntimeError("找不到 ct2-transformers-converter，先 pip install ctranslate2")
+    cmd = [conv, "--model", REPO, "--output_dir", str(dst), "--quantization", "int8",
+           "--copy_files", *COPY]
+    print("转换中（要先下 2.4GB fp32 权重，代理慢时多跑几次）：\n  " + " ".join(cmd))
+    for i in range(3):
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+        if p.returncode == 0 and (dst / "model.bin").exists():
+            print("转换完成 ->", dst)
+            return dst
+        tail = (p.stderr or p.stdout or "")[-500:]
+        print(f"第 {i + 1} 次失败：\n{tail}")
+        if "401" in tail or "gated" in tail.lower() or "Unauthorized" in tail:
+            raise RuntimeError("HF 仍拒绝访问：说明账号还没在该模型页点 Agree and Access")
+        time.sleep(8)
+    raise RuntimeError("转换失败，见上面的输出")
+
+
+def pack(dst: Path) -> Path:
+    """打包成 zip，便于传到 Release 供别人首次下载。"""
+    zip_path = dst.parent / f"{MT.MODEL_NAME}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in dst.rglob("*"):
+            if p.is_file():
+                z.write(p, p.relative_to(dst.parent))
+    print(f"zip -> {zip_path}  {zip_path.stat().st_size / 1e6:.0f}MB")
+    return zip_path
 
 
 def main() -> int:
-    d = MT.env.data_dir() / "models" / MT.MODEL_NAME
-    d.mkdir(parents=True, exist_ok=True)
-    print(f"目标目录 {d}")
-    for name in CT2_FILES:
-        if (d / name).exists() and (d / name).stat().st_size > 100:
-            print(f"  跳过已有 {name}")
-            continue
-        print(f"  取 {name}")
-        fetch(CT2_REPO + name, d / name)
-    if not MT._spm(d).exists():
-        print("  取 sentencepiece.bpe.model")
-        fetch(SPM_URL, d / "sentencepiece.bpe.model")
-    print("模型齐了吗:", MT.has_model())
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--zip-upload", action="store_true", help="顺便传到 GitHub Release")
+    a = ap.parse_args()
+    work = Path(os.environ.get("W2T_HOME", str(MT.env.data_dir()))) / "_build"
+    work.mkdir(parents=True, exist_ok=True)
+    dst = convert(work)
+    print("模型可用了吗:", MT.has_model())
+    zip_path = pack(dst)
+    if a.zip_upload:
+        print("上传请跑：python scripts/build_mt_model.py --upload-only "
+              "(需要 GH_PAT，见该脚本)")
+    print("\n下一步：python scripts/mt_check.py 6   看真实翻译质量")
     return 0 if MT.has_model() else 1
 
 
