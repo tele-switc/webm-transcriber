@@ -83,7 +83,7 @@ class Translator:
         self._sp = spm.SentencePieceProcessor()
         self._sp.Load(str(_spm(d)))
         # int8 在 CPU 上就够快，也不逼用户装 CUDA
-        self._model = ctranslate2.TranslationModel(str(d), compute_type="int8")
+        self._model = ctranslate2.Translator(str(d), compute_type="int8")
 
     def translate(self, texts, on_progress=None, should_stop=None) -> list[str]:
         """批量翻译；on_progress(已完成段数, 总段数)。"""
