@@ -54,9 +54,11 @@ jobs:
           curl -L -o /tmp/linuxdeploy.AppImage \
             https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x /tmp/linuxdeploy.AppImage
-          mkdir -p pkg/Transcriber
-          cp -r dist/Transcriber/* pkg/Transcriber/
-          # linuxdeploy 要求图标文件名与 desktop 的 Icon= 键一致，否则报 "Could not find suitable icon"
+          mkdir -p pkg/Transcriber/usr/bin
+          # 按 FHS 放进 usr/bin，linuxdeploy 才能按 desktop 的 Exec= 找到主程序；
+          # PyInstaller 的 _internal 与可执行同目录，相对路径仍然成立
+          cp -r dist/Transcriber/* pkg/Transcriber/usr/bin/
+          # 图标文件名必须与 desktop 的 Icon= 键一致，否则报 "Could not find suitable icon"
           cp installer/icon.png pkg/transcriber.png
           cp installer/transcriber.desktop pkg/transcriber.desktop
           APPIMAGE_EXTRACT_AND_RUN=1 /tmp/linuxdeploy.AppImage \
