@@ -20,6 +20,7 @@ import env
 INK = RGBColor(0x25, 0x24, 0x22)      # 正文
 GREY = RGBColor(0x8A, 0x85, 0x7B)     # 次要信息
 FAINT = RGBColor(0xB8, 0xB2, 0xA6)    # 时间标签
+TRANS = RGBColor(0x4A, 0x47, 0x41)    # 译文墨色，比正文浅一档
 LATIN = "DejaVu Serif" if sys.platform.startswith("linux") else "Georgia"
 CJK = env.cjk_font()                  # 中文按平台取实际存在的字体
 SENT_END = tuple("。！？.!?…\"”')')") + (".", "!", "?")
@@ -74,6 +75,17 @@ def _page_number(par):
             el.set(qn("xml:space"), "preserve")
             el.text = text
         run._r.append(el)
+
+
+def _body(doc, space_after: float):
+    """正文段：两端对齐 + 1.34 倍行距。"""
+    p = doc.add_paragraph()
+    pf = p.paragraph_format
+    pf.space_after = Pt(space_after)
+    pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    pf.line_spacing = 1.34
+    pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    return p
 
 
 def hms(sec: float) -> str:
@@ -189,21 +201,25 @@ def build(result, mode: str = "blocks") -> Document:
             _set_fonts(r, 10.5, INK)
         return doc
 
-    for start, end, text in group(result.segments):
+    pairs = result.paired() if hasattr(result, "paired") else [
+        (a, b, t, "") for a, b, t in group(result.segments)]
+    bilingual = any(tr for _, _, _, tr in pairs)
+
+    for start, end, text, tr in pairs:
         lab = doc.add_paragraph()
         lab.paragraph_format.space_before = Pt(9)
         lab.paragraph_format.space_after = Pt(1)
         r = lab.add_run(f"{hms(start)} – {hms(end)}")
         _set_fonts(r, 8.5, FAINT, bold=False)
 
-        p = doc.add_paragraph()
-        pf = p.paragraph_format
-        pf.space_after = Pt(7)
-        pf.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
-        pf.line_spacing = 1.34
-        pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        # 双语时原文加粗、译文常规，与他那份人工校对稿的读法一致
+        p = _body(doc, 7)
         r = p.add_run(tidy(text))
-        _set_fonts(r, 11, INK)
+        _set_fonts(r, 11, INK, bold=bilingual)
+        if tr:
+            q = _body(doc, 12)
+            r = q.add_run(tr.strip())
+            _set_fonts(r, 10.5, TRANS)
     return doc
 
 

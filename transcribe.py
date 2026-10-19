@@ -46,6 +46,19 @@ class Result:
     segments: list[Segment] = field(default_factory=list)
     engine: str = ""
     repaired: bool = False
+    translations: list[str] = field(default_factory=list)   # 与 segments 同序，可空
+
+    def paired(self):
+        """按停顿聚段后的 (起, 止, 原文, 译文) 列表；没翻译时译文为空串。"""
+        import docx_export as D
+
+        out = []
+        for i, (a, b, text) in enumerate(D.group(self.segments)):
+            tr = ""
+            if self.translations and i < len(self.translations):
+                tr = self.translations[i]
+            out.append((a, b, text, tr))
+        return out
 
     @property
     def plain(self) -> str:
