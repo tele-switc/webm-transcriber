@@ -29,7 +29,7 @@ def model_dir() -> Path:
 
 
 def _spm(d: Path) -> Path:
-    for name in ("sentencepiece.bpe.model", "spm.model"):
+    for name in ("sentencepiece.bpe.model", "spm.model", "target.spm", "source.spm"):
         p = d / name
         if p.exists():
             return p
@@ -60,53 +60,95 @@ def download(on_note=None) -> Path:
     return model_dir()
 
 
-class Translator:
-    """一段进一段出的 NLLB 翻译器；模型只加载一次。"""
+class Hop:
+    """一跳翻译：一个 CT2 模型 + 它自己的分词器。
 
-    def __init__(self, src: str = "es", tgt: str = "zh"):
-        # 语向不支持时 LG.nllb 会直接报错，界面据此退回纯原文
-        self.src, self.tgt = LG.nllb(src), LG.nllb(tgt)
-        self._model = None
-        self._sp = None
+    NLLB 是"一个模型打所有语向"，要在 token 前面加语言码；
+    Marian 是"一个语向一个模型"，不需要前缀。两种都支持。
+    """
+
+    def __init__(self, kind: str, src: str, tgt: str):
+        self.kind, self.src, self.tgt = kind, src, tgt
+        self._pair = None
+
+    def dir(self) -> Path:
+        return model_dir() if self.kind == "nllb" else marian_dir(self.src, self.tgt)
 
     def _load(self):
-        if self._model is not None:
-            return
+        if self._pair:
+            return self._pair
+        import ctranslate2
         import sentencepiece as spm
 
-        if not has_model():
-            download()
-        d = model_dir()
+        d = self.dir()
+        sp = spm.SentencePieceProcessor()
+        sp.Load(str(_spm(d)))
         env.prep_cuda_paths()
-        import ctranslate2
+        self._pair = (sp, ctranslate2.Translator(str(d), compute_type="int8"))
+        return self._pair
 
-        self._sp = spm.SentencePieceProcessor()
-        self._sp.Load(str(_spm(d)))
-        # int8 在 CPU 上就够快，也不逼用户装 CUDA
-        self._model = ctranslate2.Translator(str(d), compute_type="int8")
+    def run(self, texts: list[str]) -> list[str]:
+        sp, model = self._load()
+        prefix = [LG.nllb(self.src), LG.nllb(self.tgt)] if self.kind == "nllb" else []
+        tok = [prefix + sp.encode(t, out_type=str) for t in texts]
+        hyp = model.translate_batch(tok, beam_size=2, num_hypotheses=1)
+        return [sp.decode(h.hypotheses[0]).strip() for h in hyp]
+
+
+def marian_dir(src: str, tgt: str) -> Path:
+    return env.data_dir() / "models" / f"opus-{src}-{tgt}-ct2"
+
+
+def marian_ready(src: str, tgt: str) -> bool:
+    d = marian_dir(src, tgt)
+    return (d / "model.bin").exists() and _spm(d).exists()
+
+
+def plan(src: str, tgt: str) -> list[Hop]:
+    """按可用模型规划语向：NLLB 直翻 > Marian 直翻 > Marian 经英语两跳。"""
+    if src == tgt:
+        return []
+    if has_model():
+        return [Hop("nllb", src, tgt)]
+    if marian_ready(src, tgt):
+        return [Hop("marian", src, tgt)]
+    if src != "en" and tgt != "en" and marian_ready(src, "en") and marian_ready("en", tgt):
+        return [Hop("marian", src, "en"), Hop("marian", "en", tgt)]
+    raise RuntimeError(
+        f"这台机器上还没有 {LG.label(src)}→{LG.label(tgt)} 的离线翻译模型")
+
+
+class Translator:
+    """一段进一段出的翻译器；模型只加载一次。"""
+
+    def __init__(self, src: str = "es", tgt: str = "zh"):
+        self.src_code, self.tgt_code = src[:2], tgt[:2]
+        LG.nllb(self.src_code), LG.nllb(self.tgt_code)   # 早失败：语向不在表里就别浪费时间
+        self.hops = plan(self.src_code, self.tgt_code)
 
     def translate(self, texts, on_progress=None, should_stop=None) -> list[str]:
-        """批量翻译；on_progress(已完成段数, 总段数)。"""
-        self._load()
-        out: list[str] = []
-        batch = 16
-        for i in range(0, len(texts), batch):
-            if should_stop and should_stop():
-                break
-            chunk = texts[i:i + batch]
-            tok = [[self.src, self.tgt] + self._sp.encode(t, out_type=str) for t in chunk]
-            hyp = self._model.translate_batch(tok, beam_size=2, num_hypotheses=1)
-            out += [self._sp.decode(h.hypotheses[0]) for h in hyp]
-            if on_progress:
-                on_progress(min(i + batch, len(texts)), len(texts))
-        return out
+        """逐跳翻译整批文本；on_progress(已完成段数, 总段数)。"""
+        cur = list(texts)
+        total = len(cur)
+        for hop in self.hops:
+            out: list[str] = []
+            for i in range(0, total, 16):
+                if should_stop and should_stop():
+                    return out
+                out += hop.run(cur[i:i + 16])
+                if on_progress and len(self.hops) == 1:
+                    on_progress(min(i + 16, total), total)
+            cur = out
+        if on_progress:
+            on_progress(total, total)
+        return cur
 
 
 def translate_pairs(pairs, src: str, tgt: str = "zh", on_progress=None,
                     on_note=None, should_stop=None) -> list[str]:
     """给 Result.paired() 的 (起, 止, 原文, 旧译文) 补译文；只翻原文列。"""
-    tr = Translator(src, tgt)
-    if on_note and not has_model():
+    if on_note and not (has_model() or marian_ready(src[:2], tgt[:2])):
         on_note("准备离线翻译模型…")
+    tr = Translator(src, tgt)
     return tr.translate([p[2] for p in pairs], on_progress=on_progress,
                         should_stop=should_stop)
