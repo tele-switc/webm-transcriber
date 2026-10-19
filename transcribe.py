@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import env
+import repair
 
 # Windows 控制台默认 GBK，西语/中文重音字符会直接崩，统一改 UTF-8
 for _s in (sys.stdout, sys.stderr):
@@ -44,6 +45,7 @@ class Result:
     duration: float = 0.0
     segments: list[Segment] = field(default_factory=list)
     engine: str = ""
+    repaired: bool = False
 
     @property
     def plain(self) -> str:
@@ -54,6 +56,9 @@ class Result:
         lines.append(f"- 语言: {self.language}  ")
         lines.append(f"- 时长: {fmt_hms(self.duration)}  ")
         lines.append(f"- 引擎: {self.engine}")
+        if self.repaired:
+            lines.append("  ")
+            lines.append("> 源录像的 WebM 头部丢失，已自动重建 EBML/Info/Tracks 后再转写。")
         lines.append("")
         for s in self.segments:
             if s.text:
@@ -270,8 +275,12 @@ def transcribe(path: Path, language: str | None = None, on_progress=None,
     if not env.find_ffmpeg_or_av():
         raise RuntimeError("无法解码音频：请安装 ffmpeg，或 pip install av；"
                            "也可用环境变量 W2T_FFMPEG 指定 ffmpeg 路径")
+    repaired = False
+    if repair.needs_repair(path):
+        path = repair.repair(path, on_note=on_note)
+        repaired = True
     total = media_duration(path)
-    res = Result(source=path, duration=total, engine=_model_info)
+    res = Result(source=path, duration=total, engine=_model_info, repaired=repaired)
     tmp_dir = Path(tempfile.mkdtemp(prefix="w2t_"))
     t0 = time.time()
     try:
