@@ -15,12 +15,9 @@ jobs:
           - os: windows-latest
             arch: x86_64
             out: win-x64
-          - os: macos-14          # Apple Silicon
+          - os: macos-latest      # Apple Silicon；Intel Mac 请从源码运行
             arch: arm64
             out: mac-arm64
-          - os: macos-13          # Intel
-            arch: x86_64
-            out: mac-x64
           - os: ubuntu-22.04
             arch: x86_64
             out: linux-x86_64

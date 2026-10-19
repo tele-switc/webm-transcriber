@@ -17,7 +17,7 @@
 ## 安装（用安装包的人）
 
 - **Windows**：运行 `拖拽转录-Setup.exe`，或解压 zip 后双击 `Transcriber.exe`。首次运行若弹 SmartScreen，点「更多信息 → 仍要运行」（本程序未做付费签名）。
-- **macOS**：打开 dmg，把 App 拖进「应用程序」。首次打开若提示"无法验证开发者"，在 App 上右键 → 打开 → 再点一次打开；仍不行就在终端执行 `xattr -cr /Applications/Transcriber.app`。Apple Silicon 与 Intel 各有对应包。
+- **macOS**：打开 dmg，把 App 拖进「应用程序」。目前只提供 Apple Silicon 包（Intel Mac 请从源码运行）。首次打开若提示"无法验证开发者"，在 App 上右键 → 打开 → 再点一次打开；仍不行就在终端执行 `xattr -cr /Applications/Transcriber.app`。
 - **Linux**：给 AppImage 加执行权限后运行（`chmod +x *.AppImage && ./拖拽转录.AppImage`）。
 
 转写结果默认落在**源文件旁边的「转录结果」文件夹**里（源目录不可写时才落到数据目录），界面底部「打开文件夹」可直接定位。

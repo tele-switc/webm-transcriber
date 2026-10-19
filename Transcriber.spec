@@ -17,8 +17,11 @@ ICON = str(icns) if sys.platform == "darwin" and icns.exists() else (
     str(ico) if ico.exists() else None)
 
 datas, binaries, hiddenimports = [], [], []
-for pkg in ("tkinterdnd2", "faster_whisper", "ctranslate2", "huggingface_hub",
-            "tokenizers", "av", "docx", "numpy"):
+# 只 collect 需要带数据文件的包；huggingface_hub/tokenizers 交给 PyInstaller 自带 hook，
+# 否则会把 transformers 这类根本用不到的巨型依赖拖进来。
+# onnxruntime 必须带上：faster-whisper 的 VAD 静音过滤靠它，缺了就报 ModuleNotFoundError。
+for pkg in ("tkinterdnd2", "faster_whisper", "ctranslate2", "av", "docx", "numpy",
+            "onnxruntime"):
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -36,8 +39,10 @@ for pkg in ("faster_whisper", "huggingface_hub", "tokenizers", "av"):
 
 excludes = [
     "torch", "sklearn", "scipy", "pandas", "matplotlib", "IPython", "notebook",
-    "onnxruntime", "PIL", "numba", "llvmlite", "pytest", "PyQt5", "PySide6",
+    "PIL", "numba", "llvmlite", "pytest", "PyQt5", "PySide6",
     "tkinter.test", "setuptools", "pip", "cv2", "imageio", "soundfile",
+    "transformers", "tensorflow", "keras", "jax", "flax", "datasets", "pyarrow",
+    "bitsandbytes",
 ]
 
 a = Analysis(

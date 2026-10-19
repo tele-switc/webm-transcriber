@@ -469,20 +469,39 @@ class App:
         self.root.destroy()
 
 
+def log_line(msg: str) -> None:
+    """无界面模式下出错要有地方可查：追加到数据目录的日志。"""
+    try:
+        p = Path(env.data_dir()) / "transcriber.log"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        import datetime
+
+        with p.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now():%F %T} {msg}\n")
+    except OSError:
+        pass
+
+
 def cli_mode(paths) -> bool:
-    """文件作为参数传入（含拖到 exe 图标上）：不开界面，直接转写落盘。"""
+    """文件作为参数传入（含拖到程序图标上）：不开界面，直接转写落盘。"""
     errs = []
+    log_line(f"CLI 开始：{len(paths)} 个文件 · {env.summary()}")
     for p in paths:
         try:
             res = T.transcribe(Path(p))
-            T.write_outputs(res, out_dir_for(Path(p)), ("docx", "txt", "srt"))
+            files = T.write_outputs(res, out_dir_for(Path(p)), ("docx", "txt", "srt"))
+            log_line(f"完成 {p.name}：{len(res.segments)} 句 → {files[0]}")
         except Exception as e:
             errs.append(f"{Path(p).name}：{e}")
+            log_line(f"失败 {p.name}：{e}\n{traceback.format_exc()}")
     if errs:
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror("转写失败", "\n".join(errs)[:1200])
-        root.destroy()
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("转写失败", "\n".join(errs)[:1200])
+            root.destroy()
+        except Exception:
+            pass
     return not errs
 
 
@@ -506,4 +525,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:  # 打包成无控制台程序后，崩溃也要留痕
+        log_line(f"启动失败：{e}\n{traceback.format_exc()}")
+        raise
