@@ -56,11 +56,12 @@ jobs:
           chmod +x /tmp/linuxdeploy.AppImage
           mkdir -p pkg/Transcriber
           cp -r dist/Transcriber/* pkg/Transcriber/
-          cp installer/icon.png pkg/icon.png
+          # linuxdeploy 要求图标文件名与 desktop 的 Icon= 键一致，否则报 "Could not find suitable icon"
+          cp installer/icon.png pkg/transcriber.png
           cp installer/transcriber.desktop pkg/transcriber.desktop
           APPIMAGE_EXTRACT_AND_RUN=1 /tmp/linuxdeploy.AppImage \
             --appdir pkg/Transcriber --desktop-file pkg/transcriber.desktop \
-            --icon-file pkg/icon.png --output appimage
+            --icon-file pkg/transcriber.png --output appimage
           mv Transcriber-*.AppImage dist/Transcriber-${{ matrix.out }}.AppImage
 
       - name: 组装安装包（macOS dmg）
