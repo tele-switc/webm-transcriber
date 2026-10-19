@@ -81,18 +81,29 @@ class Hop:
         import sentencepiece as spm
 
         d = self.dir()
-        sp = spm.SentencePieceProcessor()
-        sp.Load(str(_spm(d)))
+        enc = spm.SentencePieceProcessor()
+        enc.Load(str(_spm(d)))
+        # Marian 的 source.spm / target.spm 是两个不同词表：
+        # 编码用源语言那份，解码必须换目标语言那份，否则解出来是重复乱码
+        tgt_spm = d / "target.spm"
+        if tgt_spm.exists():
+            dec = spm.SentencePieceProcessor()
+            dec.Load(str(tgt_spm))
+        else:
+            dec = enc
         env.prep_cuda_paths()
-        self._pair = (sp, ctranslate2.Translator(str(d), compute_type="int8"))
+        self._pair = (enc, dec, ctranslate2.Translator(str(d), compute_type="int8"))
         return self._pair
 
     def run(self, texts: list[str]) -> list[str]:
-        sp, model = self._load()
+        enc, dec, model = self._load()
         prefix = [LG.nllb(self.src), LG.nllb(self.tgt)] if self.kind == "nllb" else []
-        tok = [prefix + sp.encode(t, out_type=str) for t in texts]
-        hyp = model.translate_batch(tok, beam_size=2, num_hypotheses=1)
-        return [sp.decode(h.hypotheses[0]).strip() for h in hyp]
+        tok = [prefix + enc.encode(t, out_type=str) for t in texts]
+        # 课堂口语没有标点、句子又长，Marian 极易陷入重复循环，必须开重复惩罚
+        hyp = model.translate_batch(tok, beam_size=2, num_hypotheses=1,
+                                    repetition_penalty=1.6, no_repeat_ngram_size=3,
+                                    max_decoding_length=320)
+        return [dec.decode(h.hypotheses[0]).strip() for h in hyp]
 
 
 def marian_dir(src: str, tgt: str) -> Path:

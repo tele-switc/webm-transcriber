@@ -25,17 +25,19 @@ def main() -> int:
         print("缺少 output/*.srt，先用 reexport.py 指向任一 srt")
         return 2
     res = R.load(srt)
-    pairs = res.paired()[:n]
+    by_sent = "--sentences" in sys.argv
+    items = ([("", "", s.text) for s in res.segments[:n]] if by_sent
+             else [(a, b, t) for a, b, t, _ in res.paired()][:n])
     src = (res.language or "es")[:2]
-    print(f"语向 {src}→{tgt} · 模型 {MT.model_dir()}")
+    print(f"{'逐句' if by_sent else '逐段'} · 语向 {src}→{tgt} · 模型 {MT.model_dir()}")
     tr = MT.Translator(src, tgt)
     t0 = time.time()
-    out = tr.translate([p[2] for p in pairs])
+    out = tr.translate([i[2] for i in items])
     dt = time.time() - t0
-    print(f"翻译 {len(out)} 段耗时 {dt:.1f}s（均 {dt / max(len(out), 1):.1f}s/段）\n")
-    for (a, b, text, _), hyp in zip(pairs, out):
-        print(f"[{a/60:.0f}分] ES: {text[:96]}")
-        print(f"       {tgt.upper()}: {hyp[:96]}\n")
+    print(f"翻译 {len(out)} 条耗时 {dt:.1f}s（均 {dt / max(len(out), 1):.1f}s/条）\n")
+    for (a, b, text), hyp in zip(items, out):
+        print(f"ES: {text[:96]}")
+        print(f"{tgt.upper()}: {hyp[:96]}\n")
     return 0
 
 
