@@ -146,6 +146,17 @@ def media_duration(path: Path) -> float:
         return 0.0
 
 
+def wav_duration(wav: Path) -> float:
+    """标准库读 wav 时长，不依赖 ffprobe。"""
+    try:
+        import wave
+
+        with wave.open(str(wav)) as w:
+            return w.getnframes() / float(w.getframerate() or 16000)
+    except Exception:
+        return 0.0
+
+
 def extract_wav_pyav(path: Path, wav: Path) -> bool:
     """没有 ffmpeg 时的兜底：用 PyAV（wheel 自带解码库）解出 16k 单声道 wav。
 
@@ -268,7 +279,7 @@ def transcribe(path: Path, language: str | None = None, on_progress=None,
             on_note("解码音频…")
         wav = extract_wav(path, tmp_dir)
         if total <= 0:
-            total = media_duration(wav)
+            total = wav_duration(wav) or media_duration(wav)
             res.duration = total
         model = load_model(on_note=on_note)
         if on_note:

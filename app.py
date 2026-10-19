@@ -95,6 +95,21 @@ def parse_drop(data: str) -> list[str]:
     return out
 
 
+def out_dir_for(src: Path) -> Path:
+    """结果优先落在源文件旁边的「转录结果」文件夹；不可写则退回数据目录。"""
+    cand = src.parent / "转录结果"
+    try:
+        cand.mkdir(parents=True, exist_ok=True)
+        probe = cand / ".w2t"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return cand
+    except OSError:
+        fallback = Path(env.data_dir()) / "output"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 class App:
     FORMATS = {
         "Word 文档 · 自动排版": ("docx", "blocks"),
@@ -388,19 +403,9 @@ class App:
             Path(path).write_text(T.render_text(self.result, ext), encoding="utf-8")
 
     def out_dir(self) -> Path:
-        """结果优先落在源文件旁边的「转录结果」文件夹；不可写则退回数据目录。"""
-        cand = Path(env.data_dir()) / "output"
-        if self.files:
-            cand = self.files[self.index].parent / "转录结果"
-        try:
-            cand.mkdir(parents=True, exist_ok=True)
-            probe = cand / ".w2t"
-            probe.write_text("ok", encoding="utf-8")
-            probe.unlink()
-        except OSError:
-            cand = Path(env.data_dir()) / "output"
-            cand.mkdir(parents=True, exist_ok=True)
-        return cand
+        """当前源文件对应的输出目录。"""
+        src = self.files[self.index] if self.files else Path.cwd()
+        return out_dir_for(src)
 
     def auto_export(self) -> Path | None:
         """转完自动落一套文件，用户不必再点导出。"""
@@ -464,7 +469,28 @@ class App:
         self.root.destroy()
 
 
+def cli_mode(paths) -> bool:
+    """文件作为参数传入（含拖到 exe 图标上）：不开界面，直接转写落盘。"""
+    errs = []
+    for p in paths:
+        try:
+            res = T.transcribe(Path(p))
+            T.write_outputs(res, out_dir_for(Path(p)), ("docx", "txt", "srt"))
+        except Exception as e:
+            errs.append(f"{Path(p).name}：{e}")
+    if errs:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("转写失败", "\n".join(errs)[:1200])
+        root.destroy()
+    return not errs
+
+
 def main():
+    given = [Path(a) for a in sys.argv[1:]
+             if Path(a).suffix.lower() in VIDEO_EXT and Path(a).exists()]
+    if given:
+        sys.exit(0 if cli_mode(given) else 1)
     root = TkinterDnD.Tk()
     ui = App(root)
     if not env.has_model():
