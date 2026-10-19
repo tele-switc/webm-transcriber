@@ -60,7 +60,7 @@ def _model_search() -> list[Path]:
     cands.append(data_dir() / "models" / MODEL_NAME)        # 首次下载到这里
     # 本机既有缓存：老机器上不必再下 1.6GB
     if sys.platform == "win32":
-        cands.append(Path(r"C:\Users\tele2\caches\whisper") / MODEL_NAME)
+        cands.append(Path.home() / "caches" / "whisper" / MODEL_NAME)
         cands.append(Path.home() / ".cache" / "whisper" / MODEL_NAME)
     else:
         cands.append(Path.home() / ".cache" / "whisper" / MODEL_NAME)
@@ -91,7 +91,7 @@ def cuda_dirs() -> list[Path]:
         cands.append(Path(os.environ["W2T_CUDA_DIR"]))
     cands.append(bundle_dir() / "_cuda")
     if sys.platform == "win32":
-        cands.append(Path(r"C:\Users\tele2\caches\ct2-cuda12"))
+        cands.append(Path.home() / "caches" / "ct2-cuda12")
     return _existing_dirs(*cands)
 
 

@@ -6,6 +6,8 @@
 
 import sys
 import threading
+import queue
+import tempfile
 import time
 from pathlib import Path
 
@@ -13,8 +15,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import transcribe as T  # noqa: E402
 import app as A  # noqa: E402
 
-SAMPLE = Path(r"C:\Users\tele2\AppData\Local\Temp\w2t_test_sample.webm")
-SAMPLE_SP = Path(r"C:\Users\tele2\AppData\Local\Temp\w2t test sample 1.webm")
+TMP = Path(tempfile.gettempdir())
+SAMPLE = TMP / "w2t_test_sample.webm"
+SAMPLE_SP = TMP / "w2t test sample 1.webm"
 OUT = Path(__file__).parent / "output"
 
 
