@@ -47,24 +47,13 @@ jobs:
       - name: 打包
         run: pyinstaller --noconfirm Transcriber.spec
 
-      - name: 组装安装包（Linux AppImage）
+      - name: 组装安装包（Linux tar.gz）
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update && sudo apt-get install -y libfuse2 desktop-file-utils
-          curl -L -o /tmp/linuxdeploy.AppImage \
-            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          chmod +x /tmp/linuxdeploy.AppImage
-          mkdir -p pkg/Transcriber/usr/bin
-          # 按 FHS 放进 usr/bin，linuxdeploy 才能按 desktop 的 Exec= 找到主程序；
-          # PyInstaller 的 _internal 与可执行同目录，相对路径仍然成立
-          cp -r dist/Transcriber/* pkg/Transcriber/usr/bin/
-          # 图标文件名必须与 desktop 的 Icon= 键一致，否则报 "Could not find suitable icon"
-          cp installer/icon.png pkg/transcriber.png
-          cp installer/transcriber.desktop pkg/transcriber.desktop
-          APPIMAGE_EXTRACT_AND_RUN=1 /tmp/linuxdeploy.AppImage \
-            --appdir pkg/Transcriber --desktop-file pkg/transcriber.desktop \
-            --icon-file pkg/transcriber.png --output appimage
-          mv Transcriber-*.AppImage dist/Transcriber-${{ matrix.out }}.AppImage
+          # AppImage 需要 linuxdeploy 认 desktop 布局，坑多且收益小；
+          # 解压即用的 tar.gz 对 Linux 用户更直接
+          cd dist && tar -czf Transcriber-linux-x86_64.tar.gz Transcriber
+          ls -la
 
       - name: 组装安装包（macOS dmg）
         if: runner.os == 'macOS'
@@ -92,7 +81,7 @@ jobs:
           name: Transcriber-${{ matrix.out }}
           path: |
             dist/*.dmg
-            dist/*.AppImage
+            dist/*.tar.gz
             dist/*Setup*.exe
             dist/*-portable.zip
           if-no-files-found: warn

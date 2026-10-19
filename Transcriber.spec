@@ -70,7 +70,7 @@ def _keep(item):
 
 a.binaries = [b for b in a.binaries if _keep(b)]
 a.datas = [d for d in a.datas if _keep(d)]
-print(f"[spec] 过滤后 binaries={len(a.binaries)} datas={len(a.datas)}")
+print(f"[spec] kept binaries={len(a.binaries)} datas={len(a.datas)}")  # 必须 ASCII：Windows runner 用 charmap 输出
 
 pyz = PYZ(a.pure)
 
