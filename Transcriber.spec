@@ -21,7 +21,7 @@ datas, binaries, hiddenimports = [], [], []
 # 否则会把 transformers 这类根本用不到的巨型依赖拖进来。
 # onnxruntime 必须带上：faster-whisper 的 VAD 静音过滤靠它，缺了就报 ModuleNotFoundError。
 for pkg in ("tkinterdnd2", "faster_whisper", "ctranslate2", "av", "docx", "numpy",
-            "onnxruntime"):
+            "onnxruntime", "sentencepiece"):
     try:
         d, b, h = collect_all(pkg)
         datas += d
