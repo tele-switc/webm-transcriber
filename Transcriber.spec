@@ -55,6 +55,23 @@ a = Analysis(
     excludes=excludes,
     noarchive=False,
 )
+
+# 开发机上 pip 装的 onnxruntime/ctranslate2 会把 GPU 运行库一起拽进来：
+# torch 504MB、onnxruntime CUDA provider 176MB 之类，对 CPU 推理毫无用处。
+# excludes 只管 Python 模块，二进制得在这里按路径名剔掉。
+DROP_KEYS = ("torch", "providers_cuda", "providers_tensorrt", "providers_dml",
+             "providers_coreml", "cublas", "cudnn", "botocore", "s3transfer")
+
+
+def _keep(item):
+    path = f"{item[0]} {item[1]}".lower()
+    return not any(k in path for k in DROP_KEYS)
+
+
+a.binaries = [b for b in a.binaries if _keep(b)]
+a.datas = [d for d in a.datas if _keep(d)]
+print(f"[spec] 过滤后 binaries={len(a.binaries)} datas={len(a.datas)}")
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
