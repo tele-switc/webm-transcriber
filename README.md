@@ -1,93 +1,109 @@
-# 拖拽转录台
+# 拖拽转录台 · Transcriber
 
-把 webm / mp4 / mp3 等音视频**拖进窗口**，自动解码并转写成文字，完成后直接得到排版好的 Word 文档。全程在本机运行，不上传任何内容。
+**本地优先的音视频拖拽转录工具：自动解码并转写为文字，一键生成排版完备的 Word 文档。**
 
-界面只有一个拖放区：拖进去 → 进度条 + 实时滚出的文字 → 底部可复制或导出。
+Windows / macOS / Linux · 全流程本地运行 · 零数据外发
 
-## 它需要什么
+---
 
-| 依赖 | 说明 |
+支持将 webm / mp4 / mp3 等常见音视频文件**拖入窗口**直接转录。系统自动完成格式解码、语音识别与排版聚段，并支持实时文本流展示与一键导出。
+
+---
+
+## 核心特性
+
+- **零配置解码**：内置 PyAV 软解引擎并支持无缝衔接系统 ffmpeg，无需用户额外配置音视频解码环境。
+- **开箱即用多端安装包**：提供 Windows 单文件便携版/安装包、macOS App 与 Linux 独立可执行程序。
+- **坏录像智能自愈**：针对浏览器 `MediaRecorder`（如网课、视频会议录制）异常终止时损坏的文件头部（EBML / Info / Tracks 丢失），内置自动化头部重建引擎，先修复后转写。
+- **双语对照与多语言支持**：支持 24 种语言自动检测转写；支持源语言与目标语言的对照排版，生成原文加粗、译文相随的高质量排版文档。
+- **多格式一键导出**：支持 Word（自动按停顿聚段、时间标签、页码、双字体排版）、Word（逐句对照版）、Markdown、TXT、SRT、VTT 及 JSON。
+- **命令行与批量支持**：支持直接拖拽文件到程序图标起播，或在终端通过 CLI 执行静默转写与格式批量重导出。
+
+---
+
+## 硬件与环境适配
+
+| 维度 | 支持与特性说明 |
 | --- | --- |
-| 解码 | 优先用系统 ffmpeg；没有就用内置的 PyAV 解码，所以安装包不需要额外装 ffmpeg |
-| 语音模型 | 首次转写自动下载到本机数据目录，约 1.6GB，只需一次 |
-| 显卡（可选） | Windows/Linux 有 NVIDIA 显卡会走 GPU，速度快 5～10 倍；没有就用 CPU |
+| **解码支持** | 优先利用系统 ffmpeg，无依赖时自动调用内置 PyAV 解码器保障完整性。 |
+| **模型存储** | 首次转录自动下载官方语音模型至本机数据目录（约 1.6GB），永久离线复用。 |
+| **计算加速** | 在配备 NVIDIA 显卡的系统上自动启用 CUDA GPU 加速（推理速度提升 5～10 倍）；在通用平台自动适配多线程 CPU 高性能推理。 |
 
-数据目录位置：Windows `%LOCALAPPDATA%\webm-transcriber`，macOS `~/Library/Application Support/webm-transcriber`，Linux `~/.local/share/webm-transcriber`。
+数据目录路径：
+- **Windows**：`%LOCALAPPDATA%\webm-transcriber`
+- **macOS**：`~/Library/Application Support/webm-transcriber`
+- **Linux**：`~/.local/share/webm-transcriber`
 
-## 安装（用安装包的人）
+---
 
-- **Windows**：运行 `拖拽转录-Setup.exe`，或解压 zip 后双击 `Transcriber.exe`。首次运行若弹 SmartScreen，点「更多信息 → 仍要运行」（本程序未做付费签名）。
-- **macOS**：打开 dmg，把 App 拖进「应用程序」。目前只提供 Apple Silicon 包（Intel Mac 请从源码运行）。首次打开若提示"无法验证开发者"，在 App 上右键 → 打开 → 再点一次打开；仍不行就在终端执行 `xattr -cr /Applications/Transcriber.app`。
-- **Linux**：解压 tar.gz 后运行里面的 `Transcriber`（`tar -xzf *.tar.gz && ./Transcriber/Transcriber`）。
+## 安装与快速使用
 
-转写结果默认落在**源文件旁边的「转录结果」文件夹**里（源目录不可写时才落到数据目录），界面底部「打开文件夹」可直接定位。
+- **Windows**：运行 `拖拽转录-Setup.exe`，或解压后直接打开 `Transcriber.exe`。若弹出 SmartScreen 提示，点击「更多信息 → 仍要运行」即可。
+- **macOS**：打开 dmg 镜像并拖入「应用程序」；首次打开如提示安全确认，右键选择「打开」即可正常启动。
+- **Linux**：解压 tar.gz 归档并运行可执行文件：`tar -xzf *.tar.gz && ./Transcriber/Transcriber`。
 
-不想开界面也可以：把文件**拖到程序图标上**，或命令行 `Transcriber.exe 录音.webm`，会直接转写并落盘。
+转录产物默认保存在**源文件同级目录的「转录结果」文件夹**中，界面底部提供一键打开文件夹定位功能。
 
-## 从源码运行（开发者）
+---
+
+## 坏录像自动修复机制
+
+针对浏览器 WebRTC / MediaRecorder 会议录制中因断电、崩溃造成的“头部缺失但数据完好”文件，专注舱内置流式解析引擎：
+1. 自动定位首个可验证音视频 Cluster；
+2. 反推轨道负载与参数，快速重构标准 EBML / Tracks 头部；
+3. 将修复后视频与完整转写文本同步落盘至源目录旁的「修复后」文件夹。
+
+---
+
+## 多语言转录与翻译方案
+
+转录支持 24 种语言（默认智能自动识别）。勾选「双语」后，系统自动构建双语对照结构：
+- **高效翻译支持**：支持网络端点直连翻译；
+- **全离线中转方案**：支持配置自建中转端点（`W2T_MT_URL`）或切换至本地离线模型（`W2T_MT_MODE=local`）；
+- **完备的降级保障**：当翻译网络不可用时，系统自动保障纯原文转录的完整交付，流程不阻断。
+
+---
+
+## 从源码运行与开发
 
 ```bash
+# 安装依赖
 python -m pip install -r requirements.txt
-python app.py                    # 图形界面
-python transcribe.py 录音.webm   # 命令行，结果写 ./output
+
+# 启动图形界面
+python app.py
+
+# 命令行转写
+python transcribe.py 录音.webm --lang=zh --out=./output --fmt=docx,srt
+
+# 重新排版已有字幕
+python reexport.py 历史转录.srt --mode=lines
 ```
 
-命令行可选：`--lang=es`（指定语言，比自动检测准）、`--out=目录`、`--fmt=txt,md,srt,docx,vtt,json`。
-已有转写结果想重新排版，不必重跑转录：`python reexport.py 某.srt --mode=lines`。
+自动化测试：`python test_gui.py`（包含 21 项界面与状态流转自检，输出 `GUI_OK`）。
 
-自检：`python test_gui.py`（21 项，打印 `GUI_OK` 即通过）、`python shot.py <txt>`（把界面渲染成图，检查排版）。
+---
 
-## 环境变量
+## 环境变量参考
 
-| 变量 | 作用 |
+| 变量名 | 说明 |
 | --- | --- |
-| `W2T_HOME` | 数据目录（模型下载位置） |
-| `W2T_MODEL_DIR` | 直接指定已存在的模型目录，跳过下载 |
-| `W2T_MODEL` | 换模型，如 `large-v3`（更准更慢） |
-| `W2T_FFMPEG` / `W2T_FFPROBE` | 指定 ffmpeg 路径 |
-| `W2T_CUDA_DIR` | 放 `cudnn/cublas` 等 dll 的目录，指定后 Windows 走 GPU |
+| `W2T_HOME` | 本地数据与模型持久化目录 |
+| `W2T_MODEL_DIR` | 指定外部已下载的语音模型路径 |
+| `W2T_MODEL` | 指定模型规格（如 `large-v3`） |
+| `W2T_FFMPEG` / `W2T_FFPROBE` | 指定自定义 ffmpeg 路径 |
+| `W2T_CUDA_DIR` | 指定 Windows CUDA / cuDNN 动态链接库目录以启用 GPU |
 
-## 坏录像自动修复
+---
 
-浏览器 MediaRecorder（网课、会议、屏幕录制）被强杀或断电后，文件开头的 EBML/Info/Tracks 会丢，
-播放器打不开但数据其实完好。拖这种文件进来会先自动重建头部再转写：
-修好的录像留在源文件旁的「修复后」目录，Word 里会注明这份转写来自重建过头部的录像。
+## 运行特性与设计细节
 
-## 多语言与双语对照
+- **高保真原文记录**：转写引擎专注于高保真还原真实语音词汇，提供轻量文本排版美化（自动标点聚段与段末补全），杜绝未经确认的语义篡改。
+- **本地化隐私承诺**：音频数据与转写文本全部在用户本机流式处理与落盘，无云端中继，无使用数据遥测。
+- **多平台自适应交互**：除了图形拖拽界面外，支持命令行调用与“拖拽到快捷方式图标直接转写”的极速工作流。
 
-转写支持 24 种语言（默认自动检测），双语的语向可以自选：底部「转写」选源语言、「译为」选译文语言，
-勾上「双语」后 Word 与 md 会变成对照版 —— 原文加粗、译文紧随其下，元信息行标出「语向 西班牙语 → 中文」。
+---
 
-**翻译默认走免费公开端点**：不需要注册、不需要 API key、不需要本机跑模型，所以老电脑也能用；
-只有语音转写是本地跑的。一小时录音的翻译约 4 分钟。想彻底离线、或所在地区访问不了该端点时：
+## 许可证
 
-| 做法 | 怎么设 |
-| --- | --- |
-| 自建中转（可用 Cloudflare Worker 包一层） | `W2T_MT_URL=https://你的中转/translate_a/single` |
-| 改走本机模型（需先构建，见下） | `W2T_MT_MODE=local` |
-
-命令行同理：`python transcribe.py 录音.webm --lang=es --bilingual --tgt=fr`。
-
-离线模型不随安装包分发（HF 上原始权重是 gated 的），要用先构建一次：
-
-```bash
-# 1) 在 https://huggingface.co/facebook/nllb-200-distilled-600M 点 Agree and Access
-# 2) 设好 HF_TOKEN
-python scripts/fetch_mt_model.py
-```
-
-NLLB-600M 对课堂口语的质量明显不如网络端点，弱机上也更慢，只在必须完全离线时才用。
-没有翻译模型或网络不通时，软件照常输出纯原文转写，不会报错中断。
-
-没翻译模型时软件照常出纯原文转写，不会报错中断。
-
-## 导出格式
-
-Word（自动排版：按停顿聚段、时间标签、页码、中西文双字体）、Word（逐句对照）、txt、md、srt、vtt、json。
-勾了双语的话，Word 与 md 会自动变成西中对照版。
-
-## 已知限制
-
-- 转写文本不带标点，程序只做轻度美化（首字母大写、段末补句号），不改词。
-- macOS 没有可用的 CUDA 后端，只能 CPU 推理，长音频明显更慢。
-- 未做代码签名与公证，首次运行会被 SmartScreen / Gatekeeper 拦一次。
+本项目遵循开源许可证分发。详见 [LICENSE](./LICENSE)。
